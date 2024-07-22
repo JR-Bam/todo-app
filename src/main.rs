@@ -1,9 +1,10 @@
-use eframe::egui::{self, CentralPanel, FontFamily, FontId, Layout, SidePanel, TextStyle, TopBottomPanel, ViewportBuilder};
+use eframe::egui::{self, CentralPanel, FontFamily, FontId, Id, Layout, ScrollArea, SidePanel, TextStyle, TopBottomPanel, ViewportBuilder};
 use todo_func::{json_parser, TodoApp};
 
 mod todo_func;
 
 const PADDING: f32 = 5.0;
+const TEMP_INPUT_ID_NAME: &str = "temp_input";
 
 impl TodoApp {
 
@@ -23,8 +24,13 @@ impl TodoApp {
             });
         }
 
-        CentralPanel::default().show(ctx, |_|{
+        CentralPanel::default().show(ctx, |ui|{
             self.render_header(ctx);
+            ScrollArea::vertical()
+            .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded)
+            .show(ui, |ui| {
+                self.render_notes(ui, ctx);
+            });
         });
     }
     fn render_header(&mut self, ctx: &eframe::egui::Context) {
@@ -51,9 +57,12 @@ impl TodoApp {
                 });
 
                 ui.with_layout(Layout::right_to_left(egui::Align::Center), |ui|{
-                    if ui.button("➕ Add Note")
-                    .clicked() {
-                        // TODO: Add Note Functionality 
+                    let add_button = ui.button("➕ Add Note");
+                    if add_button.clicked() {
+                        ctx.memory_mut( |mem| {
+                            mem.data.insert_temp(Id::new(TEMP_INPUT_ID_NAME), String::new());
+                        });
+                        self.show_addpanel = true;
                     }
                 });
                 
@@ -67,7 +76,8 @@ impl TodoApp {
         configure_fonts(&cc.egui_ctx);
         Self {
             state: json_parser::read_state_from_file().unwrap_or_default(),
-            show_sidepanel: false
+            show_sidepanel: false,
+            show_addpanel: false
         }
     }
 }

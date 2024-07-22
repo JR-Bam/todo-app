@@ -1,3 +1,16 @@
 {
-  "list": {}
+  "list": {
+    "Kill myself": {
+      "is_checked": true,
+      "is_editable": false
+    },
+    "Kill myself later": {
+      "is_checked": false,
+      "is_editable": false
+    },
+    "KIll myself soon": {
+      "is_checked": true,
+      "is_editable": false
+    }
+  }
 }
