@@ -3,7 +3,7 @@
  */
 use std::collections::HashMap;
 
-use eframe::{egui::{Id, Key, Layout, TextEdit, Ui, Vec2}, App};
+use eframe::{egui::{Id, Key, Layout, RichText, TextEdit, Ui, Vec2}, App};
 use serde::{Deserialize, Serialize};
 
 use crate::{json_parser, PADDING};
@@ -52,7 +52,7 @@ impl App for TodoApp {
 
 
 impl TodoApp {
-    pub fn render_notes(&mut self, ui: &mut Ui, ctx: &eframe::egui::Context){
+    pub fn render_notes(&mut self, ui: &mut Ui){
 
         if self.state.list.is_empty() {
             ui.centered_and_justified(|ui|{
@@ -60,56 +60,41 @@ impl TodoApp {
             });
         } else {
 
+            let mut keys_to_delete = Vec::<String>::new();
+
             for (key, value) in &mut self.state.list {
-                let note_edit_id = Id::new(format!("{}{}", key, String::from("_editflag")));
-                let note_content_id = Id::new(format!("{}{}", key, String::from("_tempcont")));
-                let mut editing = false;
-                let mut temp_content = String::new();
-                let mut content_entered = false;
-
-                ctx.memory(|mem| {
-                    editing = mem.data.get_temp::<bool>(note_edit_id).unwrap_or_default();
-                    temp_content = mem.data.get_temp::<String>(note_content_id).unwrap_or_default();
-                });
-                if temp_content == String::default() {
-                    temp_content = key.clone();
-                }
-
                 ui.add_space(NOTE_PADDING);
+                
                 ui.horizontal(|ui|{
                     // * Content
-                    ui.with_layout(Layout::left_to_right(eframe::egui::Align::Min), |ui| {
+                    ui.with_layout(Layout::left_to_right(eframe::egui::Align::Min), |ui|{
                         ui.add_space(2.);
-                        if editing {
-                            let response = ui.add_sized(
-                                Vec2::new(ui.available_width() - 50., 14. ), 
-                                TextEdit::singleline(&mut temp_content));
-                            if response.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) {
-                                content_entered = true;
-                            }
+                        ui.checkbox(&mut value.is_checked, String::new());
+
+                        if value.is_checked {
+                            ui.label(RichText::new(key).strikethrough());
                         } else {
-                            ui.checkbox(&mut value.is_checked, String::new());
                             ui.label(key);
                         }
                     });
+
                     ui.add_space(20.);
+
                     // * Buttons
                     ui.with_layout(Layout::right_to_left(eframe::egui::Align::Min), |ui|{
-                        if ui.button("📝").on_hover_text_at_pointer("Edit Note").clicked() {
-                            editing = !editing;
+                        if ui.button("❌").on_hover_text_at_pointer("Delete Note").clicked() {
+                            keys_to_delete.push(key.clone());
                         }
-                        if !editing {
-                            ui.button("❌").on_hover_text_at_pointer("Delete Note"); // TODO: Delete Functionality
-                        }
+                        ui.add_space(2.);
                     });
                 });
+
                 ui.add_space(NOTE_PADDING);
                 ui.separator();
+            }
 
-                ctx.memory_mut(|mem|{
-                    mem.data.insert_temp(note_edit_id, editing);
-                    mem.data.insert_temp(note_content_id, temp_content.clone());
-                });
+            for key in keys_to_delete {
+                self.state.list.remove(&key);
             }
         }
     }

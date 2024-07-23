@@ -1,9 +1,9 @@
 {
   "list": {
-    "Finish": {
-      "is_checked": false
+    "Finish the": {
+      "is_checked": true
     },
-    "do homework": {
+    "Finish this app": {
       "is_checked": true
     }
   }

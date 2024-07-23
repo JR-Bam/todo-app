@@ -36,7 +36,7 @@ impl TodoApp {
                 if self.show_addpanel{
                     self.render_add_panel(ui, ctx);
                 }
-                self.render_notes(ui, ctx);
+                self.render_notes(ui);
                 
             });
         });
