@@ -6,10 +6,11 @@ use std::collections::HashMap;
 use eframe::{egui::{Id, Key, Layout, TextEdit, Ui, Vec2}, App};
 use serde::{Deserialize, Serialize};
 
-use crate::TEMP_INPUT_ID_NAME;
+use crate::{json_parser, PADDING};
+const TEMP_INPUT_ID_NAME: &str = "temp_input";
+const TEMP_INPUT_WARNING_ID_NAME: &str = "notes_warning_message";
 
 // * The body's hitbox has a possibility to overlap the header's, resulting in weird focusing behaviors. This is a remedy.
-const HEADER_TO_BODY_PADDING: f32 = 14.0;
 const NOTE_PADDING: f32 = 10.0;
 
 #[derive(Serialize, Deserialize, Default)]
@@ -19,33 +20,9 @@ pub struct AppState {
 
 #[derive(Serialize, Deserialize, Default)]
 pub struct NoteFlags {
-    pub is_checked: bool,
-    pub is_editable: bool
+    pub is_checked: bool
 }
 
-pub mod json_parser {
-    use std::{fs::File, io::{self, Read, Write}, path::Path};
-    use super::AppState;
-
-    const FILE_PATH: &str = "entries.json";
-
-    pub fn read_state_from_file() -> io::Result<AppState> {
-        if Path::new(FILE_PATH).exists() {
-            let mut file = File::open(FILE_PATH)?;
-            let mut contents = String::new();
-            file.read_to_string(&mut contents)?;
-            serde_json::from_str(&contents).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
-        } else {
-            Ok(AppState::default())
-        }
-    }
-
-    pub fn save_state_to_file(state: &AppState) -> io::Result<()> {
-        let json = serde_json::to_string_pretty(state)?;
-        let mut file = File::create(FILE_PATH)?;
-        file.write_all(json.as_bytes())
-    }
-}
 
 #[derive(Default)]
 pub struct TodoApp{
@@ -76,13 +53,71 @@ impl App for TodoApp {
 
 impl TodoApp {
     pub fn render_notes(&mut self, ui: &mut Ui, ctx: &eframe::egui::Context){
-        ui.add_space(HEADER_TO_BODY_PADDING);
 
-        if self.show_addpanel {
-            let mut pending_string = String::new();
+        if self.state.list.is_empty() {
+            ui.centered_and_justified(|ui|{
+                ui.heading("🍃 Page is empty.").on_hover_cursor(eframe::egui::CursorIcon::Default);
+            });
+        } else {
+
+            for (key, value) in &mut self.state.list {
+                let note_edit_id = Id::new(format!("{}{}", key, String::from("_editflag")));
+                let note_content_id = Id::new(format!("{}{}", key, String::from("_tempcont")));
+                let mut editing = false;
+                let mut temp_content = String::new();
+                let mut content_entered = false;
+
+                ctx.memory(|mem| {
+                    editing = mem.data.get_temp::<bool>(note_edit_id).unwrap_or_default();
+                    temp_content = mem.data.get_temp::<String>(note_content_id).unwrap_or_default();
+                });
+                if temp_content == String::default() {
+                    temp_content = key.clone();
+                }
+
+                ui.add_space(NOTE_PADDING);
+                ui.horizontal(|ui|{
+                    // * Content
+                    ui.with_layout(Layout::left_to_right(eframe::egui::Align::Min), |ui| {
+                        ui.add_space(2.);
+                        if editing {
+                            let response = ui.add_sized(
+                                Vec2::new(ui.available_width() - 50., 14. ), 
+                                TextEdit::singleline(&mut temp_content));
+                            if response.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) {
+                                content_entered = true;
+                            }
+                        } else {
+                            ui.checkbox(&mut value.is_checked, String::new());
+                            ui.label(key);
+                        }
+                    });
+                    ui.add_space(20.);
+                    // * Buttons
+                    ui.with_layout(Layout::right_to_left(eframe::egui::Align::Min), |ui|{
+                        if ui.button("📝").on_hover_text_at_pointer("Edit Note").clicked() {
+                            editing = !editing;
+                        }
+                        if !editing {
+                            ui.button("❌").on_hover_text_at_pointer("Delete Note"); // TODO: Delete Functionality
+                        }
+                    });
+                });
+                ui.add_space(NOTE_PADDING);
+                ui.separator();
+
+                ctx.memory_mut(|mem|{
+                    mem.data.insert_temp(note_edit_id, editing);
+                    mem.data.insert_temp(note_content_id, temp_content.clone());
+                });
+            }
+        }
+    }
+
+    pub fn render_add_panel(&mut self, ui: &mut Ui, ctx: &eframe::egui::Context){
+        let mut pending_string = String::new();
 
             // ! So uhm.. found out you can NOT declare ui elements inside memory_mut closures. App crashes a lot.
-
             ctx.memory_mut(|mem| {
                 pending_string = mem.data.get_temp(Id::new(TEMP_INPUT_ID_NAME)).unwrap_or_default();
             });
@@ -108,29 +143,33 @@ impl TodoApp {
 
             if string_entered {
                 if pending_string.is_empty() || self.state.list.contains_key(&pending_string) {
-                    ui.label("⚠️ Invalid. Content is empty or already exists. ⚠️"); // TODO: Make this persist one way or another
+                    ctx.memory_mut(|mem|{
+                        mem.data.insert_temp(Id::new(TEMP_INPUT_WARNING_ID_NAME), true);
+                    });
                 } else {
-                    self.state.list.insert(pending_string, NoteFlags { is_checked: false, is_editable: false });
+                    self.state.list.insert(pending_string, NoteFlags { is_checked: false });
                     self.show_addpanel = false;
+                    ctx.memory_mut(|mem|{
+                        mem.data.insert_temp(Id::new(TEMP_INPUT_WARNING_ID_NAME), false);
+                    });
                 }
             }
-            ui.separator();
-        }
 
-        if self.state.list.is_empty() {
-            ui.centered_and_justified(|ui|{
-                ui.heading("🍃 Page is empty.").on_hover_cursor(eframe::egui::CursorIcon::Default);
+            let mut show_error = false;
+            ctx.memory(|mem|{
+                if let Some(show_error_flag) = mem.data.get_temp::<bool>(Id::new(TEMP_INPUT_WARNING_ID_NAME)){
+                    show_error = show_error_flag;
+                } // TODO: Custom Error
             });
-        } else {
 
-            for (key, value) in &mut self.state.list {
-                ui.add_space(NOTE_PADDING);
-                ui.with_layout(Layout::left_to_right(eframe::egui::Align::Min), |ui| {
-                    ui.checkbox(&mut value.is_checked, key);
+            if show_error {
+                ui.vertical_centered(|ui|{
+                    ui.label("⚠ Invalid. Content is empty or already exists within this page. ⚠").highlight();
+                    ui.add_space(PADDING); 
                 });
-                ui.add_space(NOTE_PADDING);
-                ui.separator();
+
             }
-        }
+
+            ui.separator();
     }
 }
