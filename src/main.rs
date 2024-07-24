@@ -1,29 +1,25 @@
-use eframe::egui::{self, CentralPanel, FontFamily, FontId, Id, Layout, ScrollArea, SidePanel, TextStyle, TopBottomPanel, ViewportBuilder};
-use todo_func::TodoApp;
+use eframe::egui::{self, Button, CentralPanel, Key, Layout, RichText, ScrollArea, SidePanel, TextEdit, TopBottomPanel, Ui, Vec2, ViewportBuilder};
+use todo_func::{Content, TodoApp};
 
 mod todo_func;
 mod json_parser;
 
 const PADDING: f32 = 5.0;
-const TEMP_INPUT_ID_NAME: &str = "temp_input";
 const HEADER_TO_BODY_PADDING: f32 = 14.0;
+// * The body's hitbox has a possibility to overlap the header's, resulting in weird focusing behaviors. This is a remedy.
+const NOTE_PADDING: f32 = 10.0;
+
+const TEMP_INPUT_ID_NAME: &str = "temp_input";
+const TEMP_INPUT_WARNING_ID_NAME: &str = "notes_warning_message";
+const TEMP_PAGE_INPUT_ID_NAME: &str = "temp_page_input";
+const TEMP_PAGE_INPUT_WARNING_ID_NAME: &str = "pages_warning_message";
 
 impl TodoApp {
 
     // * All UI declarations here
     fn render(&mut self, ctx: &eframe::egui::Context, _frame: &mut eframe::Frame){
         if self.show_sidepanel {
-            SidePanel::left("pages_list")
-                .resizable(false)
-                .show(ctx, 
-            |ui|{
-                ui.add_space(PADDING);
-                ui.vertical_centered_justified(|ui|{
-                    ui.heading("List of Pages");
-                });
-                ui.separator();
-                ui.monospace("WIP: You can put different pages here that each houses a set of notes");
-            });
+            self.render_side_panel(ctx)
         }
 
         CentralPanel::default().show(ctx, |ui|{
@@ -41,6 +37,81 @@ impl TodoApp {
             });
         });
     }
+
+    fn render_side_panel(&mut self, ctx: &eframe::egui::Context){
+        SidePanel::left("pages_list")
+            .resizable(false)
+            .show(ctx, 
+        |ui|{
+            ui.add_space(PADDING);
+            ui.vertical_centered_justified(|ui|{
+                ui.heading("Your Pages");
+            });
+            ui.separator();
+            let add_button = ui.add_sized(Vec2::new(ui.available_width(), 16.), 
+                Button::new("📝 New Page"));
+            
+            if add_button.clicked() {
+                self.show_sideaddpagepanel = !self.show_sideaddpagepanel;
+                if self.show_sideaddpagepanel {
+                    TodoApp::write_temp_mem(ctx, TEMP_PAGE_INPUT_ID_NAME, &String::new());
+                }
+            }
+
+            if self.show_sideaddpagepanel {
+                let mut pending_string = TodoApp::read_temp_mem(ctx, TEMP_PAGE_INPUT_ID_NAME).unwrap_or_default();
+                let mut string_entered = false;
+
+                ui.vertical_centered_justified(|ui|{
+                    ui.heading("⬇⬇⬇");
+                });
+
+                let response = ui.add_sized(
+                    Vec2::new(ui.available_width(), 14.), 
+                    TextEdit::singleline(&mut pending_string).hint_text("Enter name of page"));
+                
+                if response.lost_focus() && TodoApp::enter_key_pressed(ui) {
+                    string_entered = true;
+                }
+
+                TodoApp::write_temp_mem(ctx, TEMP_PAGE_INPUT_ID_NAME, &pending_string);
+
+                if string_entered {
+                    if pending_string.is_empty() || self.state_list.list.contains_key(&pending_string){
+                        TodoApp::write_persist_state(ctx, TEMP_PAGE_INPUT_WARNING_ID_NAME, &true);
+                    } else {
+                        self.state_list.list.insert(pending_string, String::default());
+                        self.show_sideaddpagepanel = false;
+                        TodoApp::write_persist_state(ctx, TEMP_PAGE_INPUT_WARNING_ID_NAME, &false);
+                    }
+                }
+
+                let show_error = TodoApp::read_persist_state(ctx, TEMP_PAGE_INPUT_WARNING_ID_NAME).unwrap_or_default();
+
+                if show_error {
+                    ui.vertical_centered_justified(|ui|{
+                        ui.label("⚠ Page title empty or already exists. ⚠");
+                    });
+                }
+            }
+            
+            // Separator using label
+            ui.add_space(PADDING);
+            ui.vertical_centered_justified(|ui|{
+                ui.monospace("...");
+            });
+            ui.add_space(PADDING);
+
+            for page_title in self.state_list.list.keys() {
+                ui.vertical_centered(|ui| {
+                    ui.add_sized(Vec2::new(ui.available_width() - 10., 16.), 
+                        Button::new(page_title).wrap_mode(egui::TextWrapMode::Truncate));
+                });
+                
+            }
+        });
+    }
+
     fn render_header(&mut self, ctx: &eframe::egui::Context) {
         TopBottomPanel::top("header").show(ctx, |ui| {
 
@@ -69,9 +140,7 @@ impl TodoApp {
                     if add_button.clicked() {
                         self.show_addpanel = !self.show_addpanel;
                         if self.show_addpanel {
-                            ctx.memory_mut( |mem| {
-                                mem.data.insert_temp(Id::new(TEMP_INPUT_ID_NAME), String::new());
-                            });
+                            TodoApp::write_temp_mem(ctx, TEMP_INPUT_ID_NAME, &String::new());
                         }
                     }
                 });
@@ -81,31 +150,103 @@ impl TodoApp {
         });
     }
 
-    // * Setup stuff here like fonts, etc.
-    fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        configure_fonts(&cc.egui_ctx);
-        Self {
-            state: json_parser::read_state_from_file().unwrap_or_default(),
-            show_sidepanel: false,
-            show_addpanel: false
+    pub fn render_notes(&mut self, ui: &mut Ui){
+
+        if self.state.list.is_empty() { // TODO: Improve upon this. Make the code more readable.
+            ui.centered_and_justified(|ui|{
+
+                let mut empty_prompt = "🍃 Page is empty.";
+                if self.is_state_list_empty() {
+                    empty_prompt = "Page not selected. Press ☰ to select/add a page."; 
+                }
+                ui.heading(empty_prompt).on_hover_cursor(eframe::egui::CursorIcon::Default);
+
+            });
+            return;
+        } 
+
+        let mut content_to_delete = Vec::<usize>::new();
+
+        for (index, content) in self.state.list.iter_mut().enumerate() {
+            ui.add_space(NOTE_PADDING);
+            
+            ui.horizontal(|ui|{
+                // * Content
+                ui.with_layout(Layout::left_to_right(eframe::egui::Align::Min), |ui|{
+                    ui.add_space(2.);
+                    ui.checkbox(&mut content.is_checked, String::new());
+
+                    if content.is_checked {
+                        ui.label(RichText::new(&content.text).strikethrough());
+                    } else {
+                        ui.label(&content.text);
+                    }
+                });
+
+                ui.add_space(20.);
+
+                // * Buttons
+                ui.with_layout(Layout::right_to_left(eframe::egui::Align::Min), |ui|{
+                    if ui.button("❌").on_hover_text_at_pointer("Delete Note").clicked() {
+                        content_to_delete.push(index);
+                    }
+                    ui.add_space(2.);
+                });
+            });
+
+
+            ui.add_space(NOTE_PADDING);
+            ui.separator();
         }
+
+        self.delete_content(&mut content_to_delete);
+        self.update_state();
+        
     }
-}
 
-fn configure_fonts(ctx: &egui::Context){
-    use FontFamily::{Monospace, Proportional};
+    pub fn render_add_panel(&mut self, ui: &mut Ui, ctx: &eframe::egui::Context){
+        let mut pending_string = TodoApp::read_temp_mem(ctx, TEMP_INPUT_ID_NAME).unwrap_or_default();
+        let mut string_entered = false;
 
-    let mut style = (*ctx.style()).clone();
-    style.text_styles = [
-        (TextStyle::Heading, FontId::new(20.0, Proportional)),
-        (TextStyle::Body, FontId::new(16.0, Proportional)),
-        (TextStyle::Monospace, FontId::new(12.0, Monospace)),
-        (TextStyle::Button, FontId::new(16.0, Proportional)),
-        (TextStyle::Small, FontId::new(8.0, Proportional)),
-    ]
-    .into();
+        ui.add_space(NOTE_PADDING);
+        ui.with_layout(Layout::left_to_right(eframe::egui::Align::Min), |ui| {
+            ui.label("Enter content: ");
+            let response = ui.add_sized(
+                Vec2::new(ui.available_width(), 14.), 
+                TextEdit::singleline(&mut pending_string));
+            
+            if response.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) {
+                string_entered = true;
+            }
+        });
+        ui.add_space(NOTE_PADDING);
 
-    ctx.set_style(style);
+        TodoApp::write_temp_mem(ctx, TEMP_INPUT_ID_NAME, &pending_string);
+
+        if string_entered {
+            if pending_string.is_empty() {
+                TodoApp::write_persist_state(ctx, TEMP_INPUT_WARNING_ID_NAME, &true);
+            } else {
+                self.state.list.push(Content {text: pending_string, is_checked: false });
+                self.update_state();
+
+                self.show_addpanel = false;
+                TodoApp::write_persist_state(ctx, TEMP_INPUT_WARNING_ID_NAME, &false);
+            }
+        }
+
+        let show_error = TodoApp::read_persist_state(ctx, TEMP_INPUT_WARNING_ID_NAME).unwrap_or_default();
+
+        if show_error {
+            ui.vertical_centered(|ui|{
+                ui.label("⚠ Invalid. Content is empty or already exists within this page. ⚠").highlight();
+                ui.add_space(PADDING); 
+            });
+
+        }
+
+        ui.separator();
+    }
 }
 
 fn main() -> eframe::Result {
