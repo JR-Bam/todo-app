@@ -7,16 +7,16 @@ TODO:       Then the right side will automatically display the content of the Ap
 TODO:       Only StateList will be saved on persistent storage during the save function, and read during the new function.
 */
 
-use std::io;
+use std::{fs::File, io::{self, Read, Write}, path::Path};
 use serde_json;
-use crate::todo_func::{AppState, StateList};
+use crate::todo_func::{AppState, StateList, Theme};
 
 const STATE_LIST_KEY: &str = "state_list";
+const CONFIG_PATH: &str = "config.json";
 
 pub fn read_state_list(cc: &eframe::CreationContext<'_>) -> io::Result<StateList> {
     if let Some(storage) = cc.storage{
         if let Some(list) = storage.get_string(STATE_LIST_KEY){
-            println!("Read state list");
             return serde_json::from_str(&list)
                 .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e));
         }
@@ -32,6 +32,23 @@ pub fn save_state_list(state_list: &StateList, storage: &mut dyn eframe::Storage
         },
         Err(e) => Err(io::Error::new(io::ErrorKind::Other, e.to_string()))
     }
+}
+
+pub fn read_theme() -> io::Result<Theme> {
+    if Path::new(CONFIG_PATH).exists() {
+        let mut file = File::open(CONFIG_PATH)?;
+        let mut contents = String::new();
+        file.read_to_string(&mut contents)?;
+        serde_json::from_str(&contents).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))
+    } else {
+        Ok(Theme::default())
+    }
+}
+
+pub fn save_theme(theme: &Theme) -> io::Result<()> {
+    let json = serde_json::to_string_pretty(theme)?;
+    let mut file = File::create(CONFIG_PATH)?;
+    file.write_all(json.as_bytes())
 }
 
 pub fn state_to_json_string(state: &AppState) -> String {

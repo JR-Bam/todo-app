@@ -1,4 +1,4 @@
-use eframe::egui::{self, Button, CentralPanel, Layout, RichText, ScrollArea, SidePanel, TextEdit, TopBottomPanel, Ui, Vec2, ViewportBuilder};
+use eframe::egui::{self, Button, CentralPanel, Label, Layout, RichText, ScrollArea, SidePanel, TextEdit, TopBottomPanel, Ui, Vec2, ViewportBuilder, Window};
 use todo_func::{Content, TodoApp};
 
 mod todo_func;
@@ -141,10 +141,14 @@ impl TodoApp {
                     if ui.button("⚙")
                     .on_hover_text_at_pointer("Settings")
                     .clicked() {
-                        // TODO: Settings Functionality
+                        self.show_settings = true;
                     }
                     
                 });
+
+                if self.show_settings {
+                    self.render_settings(ctx);
+                }
 
                 ui.with_layout(Layout::right_to_left(egui::Align::Center), |ui|{
                     let add_button = ui.button("➕ Add Note");
@@ -161,6 +165,33 @@ impl TodoApp {
         });
     }
 
+    fn render_settings(&mut self, ctx: &eframe::egui::Context) {
+
+        Window::new("Settings").open(&mut self.show_settings).min_width(200.)
+        .show(ctx, |ui|{
+            ui.add_space(PADDING);
+            ui.horizontal(|ui| {
+                ui.add_sized(Vec2::new(70., 18.), Label::new("Theme: "));
+                let theme_btn = ui.add_sized(Vec2::new(ui.available_width() - 2., 20.), 
+                    Button::new({
+                        if self.dark_mode.is_dark_mode {
+                            "🌙 Dark"
+                        } else {
+                            "🌞 Light"
+                        }
+                    })
+                );
+
+                if theme_btn.clicked() {
+                    self.dark_mode.is_dark_mode = !self.dark_mode.is_dark_mode;
+                }
+
+            });
+            
+        });
+
+    }
+
     fn display_empty_content_prompt(&self, ui: &mut Ui, to_print: &str){
         ui.centered_and_justified(|ui|{
 
@@ -169,7 +200,7 @@ impl TodoApp {
         });
     }
 
-    pub fn render_notes(&mut self, ui: &mut Ui){
+    fn render_notes(&mut self, ui: &mut Ui){
 
         if self.no_page_selected() {
             self.display_empty_content_prompt(ui, "Page not selected. Press ☰ to select/add a page.");
@@ -220,7 +251,7 @@ impl TodoApp {
         
     }
 
-    pub fn render_add_panel(&mut self, ui: &mut Ui, ctx: &eframe::egui::Context){
+    fn render_add_panel(&mut self, ui: &mut Ui, ctx: &eframe::egui::Context){
         let mut pending_string = TodoApp::read_temp_mem(ctx, TEMP_INPUT_ID_NAME).unwrap_or_default();
         let mut string_entered = false;
 

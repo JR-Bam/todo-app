@@ -3,7 +3,7 @@
  */
 use std::collections::HashMap;
 
-use eframe::{egui::{self, FontFamily, FontId, Id, Key, TextStyle, Ui}, App};
+use eframe::{egui::{self, FontFamily, FontId, Id, Key, TextStyle, Ui, Visuals}, App};
 use serde::{Deserialize, Serialize};
 
 use crate::json_parser;
@@ -32,7 +32,14 @@ pub struct TodoApp{
     pub state_list: StateList,
     pub show_sidepanel: bool,
     pub show_addpanel: bool,
-    pub show_sideaddpagepanel: bool
+    pub show_sideaddpagepanel: bool,
+    pub show_settings: bool,
+    pub dark_mode: Theme
+}
+
+#[derive(Serialize, Deserialize, Default)]
+pub struct Theme {
+    pub is_dark_mode: bool
 }
 
 impl App for TodoApp {
@@ -40,6 +47,7 @@ impl App for TodoApp {
     fn raw_input_hook(&mut self, _ctx: &eframe::egui::Context, _raw_input: &mut eframe::egui::RawInput) {} // TODO
     
     fn update(&mut self, ctx: &eframe::egui::Context, frame: &mut eframe::Frame) {
+        self.update_theme(ctx);
         self.render(ctx, frame);
     }
     fn persist_egui_memory(&self) -> bool {
@@ -47,9 +55,13 @@ impl App for TodoApp {
     }
 
     fn save(&mut self, _storage: &mut dyn eframe::Storage) {
-        if let Err(_) = json_parser::save_state_list(&self.state_list, _storage){
-            println!("Error while saving state_list.");
+        if let Err(e) = json_parser::save_state_list(&self.state_list, _storage){
+            eprintln!("Error while saving state_listL {}", e);
         }
+
+        if let Err(e) = json_parser::save_theme(&self.dark_mode) {
+            eprintln!("Failed to save theme: {}", e);
+        } 
     }
 
 
@@ -63,12 +75,13 @@ impl TodoApp {
         let state = AppState::default();
         state_list.current_app_state = String::new();
 
+        let dark_mode = json_parser::read_theme().unwrap_or(Theme {is_dark_mode: true});
+
         Self {
             state_list,
             state,
-            show_sidepanel: false,
-            show_addpanel: false,
-            show_sideaddpagepanel: false
+            dark_mode,
+            ..Default::default()
         }
     }
 }
@@ -149,6 +162,14 @@ impl TodoApp {
             &self.state_list.list.get(
                 &self.state_list.current_app_state))
                 .unwrap_or_default();
+    }
+
+    pub fn update_theme(&self, ctx: &eframe::egui::Context){
+        if self.dark_mode.is_dark_mode {
+            ctx.set_visuals(Visuals::dark());
+        } else {
+            ctx.set_visuals(Visuals::light());
+        }
     }
     
 }
