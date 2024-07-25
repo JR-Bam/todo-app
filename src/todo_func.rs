@@ -59,13 +59,9 @@ impl TodoApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         configure_fonts(&cc.egui_ctx);
 
-        let state_list = json_parser::read_state_list(cc).unwrap_or_default();
-        let mut state = AppState::default();
-
-        if !state_list.list.is_empty() && !state_list.current_app_state.is_empty() {
-            state = json_parser::json_string_to_state(&state_list.list.get(&state_list.current_app_state)).unwrap_or_default();
-        }
-
+        let mut state_list = json_parser::read_state_list(cc).unwrap_or_default();
+        let state = AppState::default();
+        state_list.current_app_state = String::new();
 
         Self {
             state_list,
@@ -136,12 +132,23 @@ impl TodoApp {
         self.state_list.list.insert(self.state_list.current_app_state.clone(), state_as_json);
     }
 
-    pub fn is_state_list_empty(&self) -> bool {
-        self.state_list.list.len() == 0
+    pub fn no_page_selected(&self) -> bool {
+        self.state_list.current_app_state.is_empty()
     }
 
     pub fn enter_key_pressed(ui: &Ui) -> bool {
         ui.input(|i| i.key_pressed(Key::Enter))
+    }
+
+    pub fn is_current_page(&self, title: &str) -> bool {
+        title == self.state_list.current_app_state.as_str()
+    }
+
+    pub fn show_updated_state(&mut self) {
+        self.state = json_parser::json_string_to_state(
+            &self.state_list.list.get(
+                &self.state_list.current_app_state))
+                .unwrap_or_default();
     }
     
 }

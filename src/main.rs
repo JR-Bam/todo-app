@@ -1,4 +1,4 @@
-use eframe::egui::{self, Button, CentralPanel, Key, Layout, RichText, ScrollArea, SidePanel, TextEdit, TopBottomPanel, Ui, Vec2, ViewportBuilder};
+use eframe::egui::{self, Button, CentralPanel, Layout, RichText, ScrollArea, SidePanel, TextEdit, TopBottomPanel, Ui, Vec2, ViewportBuilder};
 use todo_func::{Content, TodoApp};
 
 mod todo_func;
@@ -103,12 +103,23 @@ impl TodoApp {
             ui.add_space(PADDING);
 
             for page_title in self.state_list.list.keys() {
-                ui.vertical_centered(|ui| {
+                let mut title = page_title.clone();
+                if self.is_current_page(&page_title) {
+                    title = format!("➡{}", title);
+                }
+
+                let response = ui.vertical_centered(|ui| {
                     ui.add_sized(Vec2::new(ui.available_width() - 10., 16.), 
-                        Button::new(page_title).wrap_mode(egui::TextWrapMode::Truncate));
+                        Button::new(title).wrap_mode(egui::TextWrapMode::Truncate))
                 });
+
+                if response.inner.clicked() {
+                    self.state_list.current_app_state = page_title.clone();
+                }
                 
             }
+
+            self.show_updated_state(); // Maybe this can be optimized by calling only if there's a click
         });
     }
 
@@ -150,20 +161,25 @@ impl TodoApp {
         });
     }
 
+    fn display_empty_content_prompt(&self, ui: &mut Ui, to_print: &str){
+        ui.centered_and_justified(|ui|{
+
+            ui.heading(to_print).on_hover_cursor(eframe::egui::CursorIcon::Default);
+
+        });
+    }
+
     pub fn render_notes(&mut self, ui: &mut Ui){
 
-        if self.state.list.is_empty() { // TODO: Improve upon this. Make the code more readable.
-            ui.centered_and_justified(|ui|{
-
-                let mut empty_prompt = "🍃 Page is empty.";
-                if self.is_state_list_empty() {
-                    empty_prompt = "Page not selected. Press ☰ to select/add a page."; 
-                }
-                ui.heading(empty_prompt).on_hover_cursor(eframe::egui::CursorIcon::Default);
-
-            });
+        if self.no_page_selected() {
+            self.display_empty_content_prompt(ui, "Page not selected. Press ☰ to select/add a page.");
             return;
-        } 
+        }
+
+        if self.state.list.is_empty() {
+            self.display_empty_content_prompt(ui, "🍃 Page is empty.");
+            return;
+        }
 
         let mut content_to_delete = Vec::<usize>::new();
 
@@ -215,7 +231,7 @@ impl TodoApp {
                 Vec2::new(ui.available_width(), 14.), 
                 TextEdit::singleline(&mut pending_string));
             
-            if response.lost_focus() && ui.input(|i| i.key_pressed(Key::Enter)) {
+            if response.lost_focus() && TodoApp::enter_key_pressed(ui) {
                 string_entered = true;
             }
         });
