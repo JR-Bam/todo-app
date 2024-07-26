@@ -1,12 +1,3 @@
-/*
-TODO: Continue working on saving multiple notes/states. My current idea is:
-TODO:       StateList stores the title and content of multiple states in a hashmap.
-TODO:       When you open the sideback, a list of buttons, which content is a state title for each will be shown.
-TODO:       Clicking one will look at the statelist and deserialize the string value which houses the content of the AppState
-TODO:       Then the right side will automatically display the content of the AppState.
-TODO:       Only StateList will be saved on persistent storage during the save function, and read during the new function.
-*/
-
 use std::{fs::File, io::{self, Read, Write}, path::Path};
 use serde_json;
 use crate::todo_func::{AppState, StateList, Theme};

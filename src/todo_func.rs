@@ -1,6 +1,3 @@
-/*
-  TODO: using the persistent storage of App, try to store a value of AppState.list depending on which page to use. 
- */
 use std::collections::HashMap;
 
 use eframe::{egui::{self, FontFamily, FontId, Id, Key, TextStyle, Ui, Visuals}, App};
@@ -34,6 +31,7 @@ pub struct TodoApp{
     pub show_addpanel: bool,
     pub show_sideaddpagepanel: bool,
     pub show_settings: bool,
+    pub show_reset_popup: bool,
     pub dark_mode: Theme
 }
 
@@ -170,6 +168,11 @@ impl TodoApp {
         } else {
             ctx.set_visuals(Visuals::light());
         }
+    }
+
+    pub fn delete_data(&mut self){
+        self.state = AppState::default();
+        self.state_list = StateList::default();
     }
     
 }

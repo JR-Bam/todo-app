@@ -1,4 +1,5 @@
-use eframe::egui::{self, Button, CentralPanel, Label, Layout, RichText, ScrollArea, SidePanel, TextEdit, TopBottomPanel, Ui, Vec2, ViewportBuilder, Window};
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+use eframe::egui::{self, Button, CentralPanel, Layout, RichText, ScrollArea, SidePanel, TextEdit, TopBottomPanel, Ui, Vec2, ViewportBuilder, Window};
 use todo_func::{Content, TodoApp};
 
 mod todo_func;
@@ -102,6 +103,7 @@ impl TodoApp {
             });
             ui.add_space(PADDING);
 
+            let mut page_title_clicked = false;
             for page_title in self.state_list.list.keys() {
                 let mut title = page_title.clone();
                 if self.is_current_page(&page_title) {
@@ -115,11 +117,14 @@ impl TodoApp {
 
                 if response.inner.clicked() {
                     self.state_list.current_app_state = page_title.clone();
+                    page_title_clicked = true;
                 }
                 
             }
 
-            self.show_updated_state(); // Maybe this can be optimized by calling only if there's a click
+            if page_title_clicked {
+                self.show_updated_state();
+            }
         });
     }
 
@@ -151,7 +156,7 @@ impl TodoApp {
                 }
 
                 ui.with_layout(Layout::right_to_left(egui::Align::Center), |ui|{
-                    let add_button = ui.button("➕ Add Note");
+                    let add_button = ui.button("➕ New Note");
                     if add_button.clicked() {
                         self.show_addpanel = !self.show_addpanel;
                         if self.show_addpanel {
@@ -167,28 +172,61 @@ impl TodoApp {
 
     fn render_settings(&mut self, ctx: &eframe::egui::Context) {
 
-        Window::new("Settings").open(&mut self.show_settings).min_width(200.)
+        Window::new("Settings").open(&mut self.show_settings).fade_in(true).fade_out(true).min_width(200.)
         .show(ctx, |ui|{
             ui.add_space(PADDING);
-            ui.horizontal(|ui| {
-                ui.add_sized(Vec2::new(70., 18.), Label::new("Theme: "));
-                let theme_btn = ui.add_sized(Vec2::new(ui.available_width() - 2., 20.), 
-                    Button::new({
-                        if self.dark_mode.is_dark_mode {
-                            "🌙 Dark"
-                        } else {
-                            "🌞 Light"
-                        }
-                    })
-                );
+            ui.with_layout(Layout::left_to_right(egui::Align::Min), |ui|{
+                ui.add_space(PADDING);
+                ui.vertical(|ui|{
+                    ui.label("Theme: ");
+                    ui.label("Clear Data: ");
+                });
+                ui.vertical_centered_justified(|ui| {
+                    let theme_btn = ui.button( if self.dark_mode.is_dark_mode {"🌙 Dark"} else {"🌞 Light"});
+                    let reset_btn = ui.button("🔁Reset");
+    
+                    if theme_btn.clicked() {
+                        self.dark_mode.is_dark_mode = !self.dark_mode.is_dark_mode;
+                    }
 
-                if theme_btn.clicked() {
-                    self.dark_mode.is_dark_mode = !self.dark_mode.is_dark_mode;
-                }
+                    if reset_btn.clicked() {
+                        self.show_reset_popup = true;
+                    }
+    
+                });
+            }); 
 
+            ui.add_space(30.);
+            ui.separator();
+            ui.vertical_centered(|ui|{
+                ui.small("Made with Eframe/Egui in Rust!");
+                ui.hyperlink_to(RichText::new("Visit the Source Code!").small(), "https://github.com/JR-Bam/todo-app");
             });
             
         });
+
+        if self.show_reset_popup {
+            let mut temp_show_popup = self.show_reset_popup;
+            Window::new("Confirm Clearing of Data.").title_bar(false).open(&mut temp_show_popup).resizable(false).movable(true).show(ctx, |ui|{
+                ui.monospace("Clearing data includes all notes and pages and cannot be reversed. Are you sure you want to delete your data?");
+                ui.add_space(PADDING);
+                ui.with_layout( Layout::left_to_right(egui::Align::Min),|ui|{
+                    let yes = ui.button("Yes");
+                    let no = ui.button("No");
+
+                    if no.clicked() {
+                        self.show_reset_popup = false;
+                    }
+
+                    if yes.clicked() {
+                        self.delete_data();
+                        self.show_reset_popup = false;
+                    }
+                });
+
+            });
+        }
+        
 
     }
 
