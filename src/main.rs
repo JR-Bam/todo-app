@@ -1,5 +1,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-use eframe::egui::{self, Button, CentralPanel, Layout, RichText, ScrollArea, SidePanel, TextEdit, TopBottomPanel, Ui, Vec2, ViewportBuilder, Window};
+use eframe::{egui::{self, Button, CentralPanel, Frame, Label, Layout, RichText, ScrollArea, SidePanel, TextEdit, TopBottomPanel, Ui, Vec2, ViewportBuilder, Window}, Theme};
 use todo_func::{Content, TodoApp};
 
 mod todo_func;
@@ -40,10 +40,40 @@ impl TodoApp {
     }
 
     fn render_side_panel(&mut self, ctx: &eframe::egui::Context){
+        let window_width = ctx.available_rect().width();
+        // Only allow users to drag the side panel within 20% - 60% of the width of the entire window
+        let min_width = window_width * 0.2;
+        let max_width = window_width * 0.6;
+
         SidePanel::left("pages_list")
-            .resizable(false)
+            .resizable(true)
+            .width_range(min_width..=max_width)
             .show(ctx, 
         |ui|{
+            let mut to_delete_page = false;
+
+            TopBottomPanel::bottom("footer")
+            .frame(Frame::default().outer_margin(10.))
+            .show_separator_line(false)
+            .show_inside(ui, |ui| {
+                ui.vertical_centered_justified(|ui|{
+
+                    ui.monospace("...");
+                    
+                    ui.add_space(NOTE_PADDING);
+                    if !self.no_page_selected() {
+                        let delete_btn = ui.button("🗑 Delete Page");
+                        if delete_btn.clicked() {
+                            to_delete_page = true;
+                        }
+                    } else {
+                        ui.monospace("No Page Selected");
+                    }
+                    ui.add_space(PADDING);
+                });
+            });
+
+
             ui.add_space(PADDING);
             ui.vertical_centered_justified(|ui|{
                 ui.heading("Your Pages");
@@ -103,29 +133,43 @@ impl TodoApp {
             });
             ui.add_space(PADDING);
 
+
             let mut page_title_clicked = false;
-            for page_title in self.state_list.list.keys() {
-                let mut title = page_title.clone();
-                if self.is_current_page(&page_title) {
-                    title = format!("➡{}", title);
-                }
 
-                let response = ui.vertical_centered(|ui| {
-                    ui.add_sized(Vec2::new(ui.available_width() - 10., 16.), 
-                        Button::new(title).wrap_mode(egui::TextWrapMode::Truncate))
-                });
-
-                if response.inner.clicked() {
-                    self.state_list.current_app_state = page_title.clone();
-                    page_title_clicked = true;
+            ScrollArea::vertical()
+            .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded)
+            .show(ui, |ui|{
+                for page_title in self.state_list.list.keys() {
+                    let mut title = page_title.clone();
+                    if self.is_current_page(&page_title) {
+                        title = format!("➡{}", title);
+                    }
+    
+                    ui.vertical_centered(|ui|{
+                        let page_btn = ui.add_sized(Vec2::new(ui.available_width() - 20., 18.), 
+                    Button::new(title).wrap_mode(egui::TextWrapMode::Truncate));
+    
+                        if page_btn.clicked() {
+                            self.state_list.current_app_state = page_title.clone();
+                            page_title_clicked = true;
+                        }
+                    });
+                    
                 }
-                
-            }
+            });
+            
 
             if page_title_clicked {
                 self.show_updated_state();
             }
+
+            if to_delete_page {
+                self.show_delete_page_popup = true;
+            }
         });
+
+
+
     }
 
     fn render_header(&mut self, ctx: &eframe::egui::Context) {
@@ -205,29 +249,8 @@ impl TodoApp {
             
         });
 
-        if self.show_reset_popup {
-            let mut temp_show_popup = self.show_reset_popup;
-            Window::new("Confirm Clearing of Data.").title_bar(false).open(&mut temp_show_popup).resizable(false).movable(true).show(ctx, |ui|{
-                ui.monospace("Clearing data includes all notes and pages and cannot be reversed. Are you sure you want to delete your data?");
-                ui.add_space(PADDING);
-                ui.with_layout( Layout::left_to_right(egui::Align::Min),|ui|{
-                    let yes = ui.button("Yes");
-                    let no = ui.button("No");
-
-                    if no.clicked() {
-                        self.show_reset_popup = false;
-                    }
-
-                    if yes.clicked() {
-                        self.delete_data();
-                        self.show_reset_popup = false;
-                    }
-                });
-
-            });
-        }
+        self.update_theme(ctx);
         
-
     }
 
     fn display_empty_content_prompt(&self, ui: &mut Ui, to_print: &str){
@@ -241,7 +264,7 @@ impl TodoApp {
     fn render_notes(&mut self, ui: &mut Ui){
 
         if self.no_page_selected() {
-            self.display_empty_content_prompt(ui, "Page not selected. Press ☰ to select/add a page.");
+            self.display_empty_content_prompt(ui, "No page selected. Press ☰ to select/add a page.");
             return;
         }
 
@@ -258,13 +281,14 @@ impl TodoApp {
             ui.horizontal(|ui|{
                 // * Content
                 ui.with_layout(Layout::left_to_right(eframe::egui::Align::Min), |ui|{
+                    ui.set_width(ui.available_width() * 0.9); // Takes up only 90% of the available width
                     ui.add_space(2.);
                     ui.checkbox(&mut content.is_checked, String::new());
 
                     if content.is_checked {
-                        ui.label(RichText::new(&content.text).strikethrough());
+                        ui.add(Label::new(RichText::new(&content.text).strikethrough()).wrap());
                     } else {
-                        ui.label(&content.text);
+                        ui.add(Label::new(&content.text).wrap());
                     }
                 });
 
@@ -278,7 +302,6 @@ impl TodoApp {
                     ui.add_space(2.);
                 });
             });
-
 
             ui.add_space(NOTE_PADDING);
             ui.separator();
@@ -332,11 +355,68 @@ impl TodoApp {
 
         ui.separator();
     }
+
+
+    fn render_popups(&mut self, ctx: &eframe::egui::Context){
+        if self.show_reset_popup {
+            let mut temp_show_popup = self.show_reset_popup;
+            Window::new("Confirm Clearing of Data.").title_bar(false).open(&mut temp_show_popup).resizable(false).movable(true).show(ctx, |ui|{
+                ui.monospace("Clearing data includes all notes and pages and cannot be reversed. Are you sure you want to delete your data?");
+                ui.add_space(PADDING);
+                ui.with_layout( Layout::left_to_right(egui::Align::Min),|ui|{
+                    let yes = ui.button("Yes");
+                    let no = ui.button("No");
+
+                    if no.clicked() {
+                        self.show_reset_popup = false;
+                    }
+
+                    if yes.clicked() {
+                        self.delete_data();
+                        self.show_reset_popup = false;
+                    }
+                });
+
+            });
+        }
+
+        if self.show_delete_page_popup {
+            let mut temp_show_popup = self.show_delete_page_popup;
+            Window::new("Confirm Deleting Page.").title_bar(false).open(&mut temp_show_popup).resizable(false).movable(true).show(ctx, |ui|{
+                ui.monospace("You are attempting to delete the page entitled:");
+                ui.add_space(PADDING);
+                ui.vertical_centered(|ui|{
+                    ui.monospace(RichText::new(format!("{}", self.state_list.current_app_state)).strong());
+                });
+                ui.add_space(PADDING);
+                ui.monospace("Doing so will also delete every note within it. Are you sure of this?");
+                ui.with_layout( Layout::left_to_right(egui::Align::Min),|ui|{
+                    let yes = ui.button("Yes");
+                    let no = ui.button("No");
+
+                    if no.clicked() {
+                        self.show_delete_page_popup = false;
+                    }
+
+                    if yes.clicked() {
+                        self.delete_page();
+                        self.show_delete_page_popup = false;
+                    }
+                });
+
+            });
+        }
+    }
 }
 
 fn main() -> eframe::Result {
+    let theme = if json_parser::read_theme().unwrap_or_default().is_dark_mode {Theme::Dark} else {Theme::Light};
+
     let default_options = eframe::NativeOptions {
         viewport: ViewportBuilder::default().with_inner_size([800.0, 500.0]),
+        centered: true,
+        follow_system_theme: false,
+        default_theme: theme,
         ..Default::default()
     };
 

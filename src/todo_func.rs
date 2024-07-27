@@ -32,6 +32,7 @@ pub struct TodoApp{
     pub show_sideaddpagepanel: bool,
     pub show_settings: bool,
     pub show_reset_popup: bool,
+    pub show_delete_page_popup: bool,
     pub dark_mode: Theme
 }
 
@@ -45,8 +46,8 @@ impl App for TodoApp {
     fn raw_input_hook(&mut self, _ctx: &eframe::egui::Context, _raw_input: &mut eframe::egui::RawInput) {} // TODO
     
     fn update(&mut self, ctx: &eframe::egui::Context, frame: &mut eframe::Frame) {
-        self.update_theme(ctx);
         self.render(ctx, frame);
+        self.render_popups(ctx);
     }
     fn persist_egui_memory(&self) -> bool {
         true
@@ -173,6 +174,13 @@ impl TodoApp {
     pub fn delete_data(&mut self){
         self.state = AppState::default();
         self.state_list = StateList::default();
+        self.state_list.current_app_state = String::new();
+    }
+
+    pub fn delete_page(&mut self){
+        self.state = AppState::default();
+        self.state_list.list.remove(&self.state_list.current_app_state);
+        self.state_list.current_app_state = String::new();
     }
     
 }
