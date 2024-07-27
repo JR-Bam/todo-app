@@ -157,7 +157,7 @@ impl TodoApp {
 
                 ui.with_layout(Layout::right_to_left(egui::Align::Center), |ui|{
                     let add_button = ui.button("➕ New Note");
-                    if add_button.clicked() {
+                    if add_button.clicked() && !self.no_page_selected(){
                         self.show_addpanel = !self.show_addpanel;
                         if self.show_addpanel {
                             TodoApp::write_temp_mem(ctx, TEMP_INPUT_ID_NAME, &String::new());
