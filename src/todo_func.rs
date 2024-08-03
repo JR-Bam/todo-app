@@ -1,6 +1,9 @@
 use std::collections::HashMap;
 
-use eframe::{egui::{self, FontFamily, FontId, Id, Key, TextStyle, Ui, Visuals}, App};
+use eframe::{
+    egui::{self, FontFamily, FontId, Id, Key, TextStyle, Ui, Visuals},
+    App,
+};
 use serde::{Deserialize, Serialize};
 
 use crate::json_parser;
@@ -11,20 +14,20 @@ pub struct AppState {
 }
 
 #[derive(Serialize, Deserialize, Default)]
-pub struct Content{
+pub struct Content {
     pub text: String,
-    pub is_checked: bool
+    pub is_checked: bool,
 }
-
 
 #[derive(Serialize, Deserialize, Default)]
 pub struct StateList {
     pub list: HashMap<String, String>,
-    pub current_app_state: String
+    pub current_app_state: String,
 }
 
 #[derive(Default)]
-pub struct TodoApp{
+#[allow(clippy::struct_excessive_bools)]
+pub struct TodoApp {
     pub state: AppState,
     pub state_list: StateList,
     pub show_sidepanel: bool,
@@ -33,37 +36,39 @@ pub struct TodoApp{
     pub show_settings: bool,
     pub show_reset_popup: bool,
     pub show_delete_page_popup: bool,
-    pub dark_mode: Theme
+    pub dark_mode: Theme,
 }
 
 #[derive(Serialize, Deserialize, Default)]
 pub struct Theme {
-    pub is_dark_mode: bool
+    pub is_dark_mode: bool,
 }
 
 impl App for TodoApp {
+    fn raw_input_hook(
+        &mut self,
+        _ctx: &eframe::egui::Context,
+        _raw_input: &mut eframe::egui::RawInput,
+    ) {
+    } // TODO
 
-    fn raw_input_hook(&mut self, _ctx: &eframe::egui::Context, _raw_input: &mut eframe::egui::RawInput) {} // TODO
-    
     fn update(&mut self, ctx: &eframe::egui::Context, frame: &mut eframe::Frame) {
-        self.render(ctx, frame);
-        self.render_popups(ctx);
+        self.show(ctx, frame);
+        self.show_popups(ctx);
     }
     fn persist_egui_memory(&self) -> bool {
         true
     }
 
-    fn save(&mut self, _storage: &mut dyn eframe::Storage) {
-        if let Err(e) = json_parser::save_state_list(&self.state_list, _storage){
-            eprintln!("Error while saving state_listL {}", e);
+    fn save(&mut self, storage: &mut dyn eframe::Storage) {
+        if let Err(e) = json_parser::save_state_list(&self.state_list, storage) {
+            eprintln!("Error while saving state_listL {e}");
         }
 
         if let Err(e) = json_parser::save_theme(&self.dark_mode) {
-            eprintln!("Failed to save theme: {}", e);
-        } 
+            eprintln!("Failed to save theme: {e}");
+        }
     }
-
-
 }
 
 impl TodoApp {
@@ -74,18 +79,18 @@ impl TodoApp {
         let state = AppState::default();
         state_list.current_app_state = String::new();
 
-        let dark_mode = json_parser::read_theme().unwrap_or(Theme {is_dark_mode: true});
+        let dark_mode = json_parser::read_theme().unwrap_or(Theme { is_dark_mode: true });
 
         Self {
-            state_list,
             state,
+            state_list,
             dark_mode,
             ..Default::default()
         }
     }
 }
 
-fn configure_fonts(ctx: &egui::Context){
+fn configure_fonts(ctx: &egui::Context) {
     use FontFamily::{Monospace, Proportional};
 
     let mut style = (*ctx.style()).clone();
@@ -101,36 +106,30 @@ fn configure_fonts(ctx: &egui::Context){
     ctx.set_style(style);
 }
 
-
-
 impl TodoApp {
     pub fn read_temp_mem(ctx: &eframe::egui::Context, id: &'static str) -> Option<String> {
-        ctx.memory(|mem| {
-            mem.data.get_temp(Id::new(id))
-        })
+        ctx.memory(|mem| mem.data.get_temp(Id::new(id)))
     }
 
-    pub fn write_temp_mem(ctx: &eframe::egui::Context, id: &'static str, to_write: &String) {
+    pub fn write_temp_mem(ctx: &eframe::egui::Context, id: &'static str, to_write: String) {
         ctx.memory_mut(|mem| {
-            mem.data.insert_temp(Id::new(id), to_write.clone());
+            mem.data.insert_temp(Id::new(id), to_write);
         });
     }
 
     pub fn read_persist_state(ctx: &eframe::egui::Context, id: &'static str) -> Option<bool> {
-        ctx.memory(|mem| {
-            mem.data.get_temp(Id::new(id))
-        })
+        ctx.memory(|mem| mem.data.get_temp(Id::new(id)))
     }
 
-    pub fn write_persist_state(ctx: &eframe::egui::Context, id: &'static str, to_write: &bool) {
+    pub fn write_persist_state(ctx: &eframe::egui::Context, id: &'static str, to_write: bool) {
         ctx.memory_mut(|mem| {
-            mem.data.insert_temp(Id::new(id), to_write.clone());
+            mem.data.insert_temp(Id::new(id), to_write);
         });
     }
 
-    pub fn delete_content(&mut self, arr: &mut Vec<usize>){
+    pub fn delete_content(&mut self, arr: &mut Vec<usize>) {
         if arr.len() > 1 {
-            arr.sort();
+            arr.sort_unstable();
             arr.reverse();
         }
 
@@ -141,7 +140,9 @@ impl TodoApp {
 
     pub fn update_state(&mut self) {
         let state_as_json = json_parser::state_to_json_string(&self.state);
-        self.state_list.list.insert(self.state_list.current_app_state.clone(), state_as_json);
+        self.state_list
+            .list
+            .insert(self.state_list.current_app_state.clone(), state_as_json);
     }
 
     pub fn no_page_selected(&self) -> bool {
@@ -158,12 +159,12 @@ impl TodoApp {
 
     pub fn show_updated_state(&mut self) {
         self.state = json_parser::json_string_to_state(
-            &self.state_list.list.get(
-                &self.state_list.current_app_state))
-                .unwrap_or_default();
+            self.state_list.list.get(&self.state_list.current_app_state),
+        )
+        .unwrap_or_default();
     }
 
-    pub fn update_theme(&self, ctx: &eframe::egui::Context){
+    pub fn update_theme(&self, ctx: &eframe::egui::Context) {
         if self.dark_mode.is_dark_mode {
             ctx.set_visuals(Visuals::dark());
         } else {
@@ -171,16 +172,17 @@ impl TodoApp {
         }
     }
 
-    pub fn delete_data(&mut self){
+    pub fn delete_data(&mut self) {
         self.state = AppState::default();
         self.state_list = StateList::default();
         self.state_list.current_app_state = String::new();
     }
 
-    pub fn delete_page(&mut self){
+    pub fn delete_page(&mut self) {
         self.state = AppState::default();
-        self.state_list.list.remove(&self.state_list.current_app_state);
+        self.state_list
+            .list
+            .remove(&self.state_list.current_app_state);
         self.state_list.current_app_state = String::new();
     }
-    
 }
