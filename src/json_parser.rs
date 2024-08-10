@@ -1,5 +1,4 @@
 use std::{fs::File, io::{self, Read, Write}, path::Path};
-use serde_json;
 use crate::todo_func::{AppState, StateList, Theme};
 
 const STATE_LIST_KEY: &str = "state_list";
@@ -46,7 +45,7 @@ pub fn state_to_json_string(state: &AppState) -> String {
     serde_json::to_string_pretty(state).unwrap_or_default()
 }
 
-pub fn json_string_to_state(json: &Option<&String>) -> io::Result<AppState> {
+pub fn json_string_to_state(json: Option<&String>) -> io::Result<AppState> {
     if let Some(text) = json {
         return serde_json::from_str(text)
             .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e));
